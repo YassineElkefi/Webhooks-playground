@@ -159,13 +159,15 @@ export default function Home() {
     });
 
     try {
-      const response = await fetch("/api/webhooks", {
+      const response = await fetch("/api/simulator", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-simulate-failure": String(simulateFailure),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          payload,
+          simulateFailure,
+        }),
       });
 
       const result = await response.json();
