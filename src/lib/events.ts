@@ -10,13 +10,20 @@ export type WebhookEvent = {
 type EventListener = (event: WebhookEvent) => void;
 
 const events: WebhookEvent[] = [];
+const processedIds = new Set<string>();
 const listeners = new Set<EventListener>();
 
-export function getEvents() {
+export function getEvents(): WebhookEvent[] {
   return [...events];
 }
 
-export function addEvent(event: WebhookEvent) {
+export function addEvent(event: WebhookEvent): boolean {
+  // Reject an event that has already been processed.
+  if (processedIds.has(event.id)){
+    return false;
+  }
+
+  processedIds.add(event.id);
   events.unshift(event);
 
   // Keep the latest 100 events.
@@ -28,6 +35,8 @@ export function addEvent(event: WebhookEvent) {
   for (const listener of listeners) {
     listener(event);
   }
+
+  return true;
 }
 
 export function subscribe(listener: EventListener) {

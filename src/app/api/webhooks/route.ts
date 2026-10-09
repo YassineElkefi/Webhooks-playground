@@ -44,7 +44,18 @@ export async function POST(request: NextRequest) {
 
   console.log("📩 Webhook received:", event.id, event.type);
 
-  addEvent(event);
+  const isNewEvent = addEvent(event);
+  if(!isNewEvent) {
+    return NextResponse.json(
+      {
+        success: true,
+        duplicate: true,
+        message: "Event already processed",
+        eventId: event.id
+      },
+      { status: 200 }
+    );
+  }
 
   return NextResponse.json(
     {
