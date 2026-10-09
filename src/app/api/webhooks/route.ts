@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addEvent } from "@/lib/events";
 
-export const runtime = "nodejs";
-
 export async function POST(request: NextRequest) {
   let body: unknown;
 
