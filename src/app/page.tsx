@@ -11,6 +11,26 @@ type WebhookEvent = {
   data: unknown;
 };
 
+type DeliveryAttempt = {
+  number: number;
+  status: number | null;
+  message: string;
+  attemptedAt: string;
+};
+
+type DeliveryRecord = {
+  id: string;
+  type: string;
+  payload: {
+    id: string;
+    type: string;
+    createdAt: string;
+    data: unknown;
+  };
+  attempts: DeliveryAttempt[];
+  status: "pending" | "delivered" | "failed";
+};
+
 type EventFilter = "all" | "payment" | "user" | "order";
 
 const eventStyles: Record<string, string> = {
@@ -44,6 +64,9 @@ export default function Home() {
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState("");
   const [lastReceived, setLastReceived] = useState<string | null>(null);
+  const [failureMode, setFailureMode] = useState(false);
+  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   useEffect(() => {
     const source = new EventSource("/api/events/stream");
@@ -96,6 +119,99 @@ export default function Home() {
     filteredEvents[0] ??
     null;
 
+  async function deliverPayload(
+    payload: DeliveryRecord["payload"],
+    simulateFailure: boolean,
+    previousAttempts: number,
+  ) {
+    const attempt: DeliveryAttempt = {
+      number: previousAttempts + 1,
+      status: null,
+      message: "Sending request...",
+      attemptedAt: new Date().toISOString(),
+    };
+
+    setDeliveries((current) => {
+      const existing = current.find((item) => item.id === payload.id);
+
+      if (!existing) {
+        return [
+          {
+            id: payload.id,
+            type: payload.type,
+            payload,
+            attempts: [attempt],
+            status: "pending",
+          },
+          ...current,
+        ];
+      }
+
+      return current.map((item) =>
+        item.id === payload.id
+          ? {
+              ...item,
+              status: "pending",
+              attempts: [...item.attempts, attempt],
+            }
+          : item,
+      );
+    });
+
+    try {
+      const response = await fetch("/api/webhooks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-simulate-failure": String(simulateFailure),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      const success = response.ok;
+
+      setDeliveries((current) =>
+        current.map((item) =>
+          item.id === payload.id
+            ? {
+                ...item,
+                status: success ? "delivered" : "failed",
+                attempts: item.attempts.map((entry) =>
+                  entry.number === attempt.number
+                    ? {
+                        ...entry,
+                        status: response.status,
+                        message: result.message ?? response.statusText,
+                      }
+                    : entry,
+                ),
+              }
+            : item,
+        ),
+      );
+    } catch {
+      setDeliveries((current) =>
+        current.map((item) =>
+          item.id === payload.id
+            ? {
+                ...item,
+                status: "failed",
+                attempts: item.attempts.map((entry) =>
+                  entry.number === attempt.number
+                    ? {
+                        ...entry,
+                        message: "Network error: no HTTP response received",
+                      }
+                    : entry,
+                ),
+              }
+            : item,
+        ),
+      );
+    }
+  }
+
   async function simulateEvent(type: string) {
     setSending(true);
     setNotice("");
@@ -103,7 +219,7 @@ export default function Home() {
     const id = `evt_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
     const data =
-      type === "payment.succeeded" || type === "payment.failed"
+      type.startsWith("payment.")
         ? {
             paymentId: `pay_${crypto.randomUUID().slice(0, 8)}`,
             amount: Number((Math.random() * 200 + 10).toFixed(2)),
@@ -123,29 +239,34 @@ export default function Home() {
               status: "created",
             };
 
+    const payload = {
+      id,
+      type,
+      createdAt: new Date().toISOString(),
+      data,
+    };
+
     try {
-      const response = await fetch("/api/webhooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id,
-          type,
-          createdAt: new Date().toISOString(),
-          data,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setNotice(`Request failed (${response.status}): ${result.message}`);
-      } else {
-        setNotice(`Delivered to receiver: ${id}`);
-      }
-    } catch {
-      setNotice("Could not reach the webhook receiver.");
+      await deliverPayload(payload, failureMode, 0);
+      setNotice(`Delivery attempt started for ${id}`);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function retryDelivery(delivery: DeliveryRecord) {
+    if (retryingId) return;
+
+    setRetryingId(delivery.id);
+
+    try {
+      await deliverPayload(
+        delivery.payload,
+        failureMode,
+        delivery.attempts.length,
+      );
+    } finally {
+      setRetryingId(null);
     }
   }
 
@@ -322,6 +443,33 @@ export default function Home() {
                 </p>
               </div>
 
+              <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-amber-400/20 bg-amber-400/4 p-4">
+                <div>
+                  <p className="text-sm font-medium text-amber-200">
+                    Simulate receiver failure
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">
+                    Force the next delivery attempts to return HTTP 500.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={failureMode}
+                  onClick={() => setFailureMode((current) => !current)}
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                    failureMode ? "bg-amber-500" : "bg-slate-700"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${
+                      failureMode ? "left-6" : "left-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
               <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {[
                   {
@@ -364,6 +512,91 @@ export default function Home() {
                   {notice}
                 </p>
               )}
+
+              <div className="mt-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Delivery attempts</h3>
+                  <span className="text-xs text-slate-500">
+                    {deliveries.length} deliveries
+                  </span>
+                </div>
+
+                {deliveries.length === 0 ? (
+                  <p className="rounded-xl border border-white/[0.07] p-4 text-sm text-slate-500">
+                    No delivery attempts yet. Generate an event to get started.
+                  </p>
+                ) : (
+                  <div className="max-h-80 space-y-3 overflow-y-auto">
+                    {deliveries.map((delivery) => (
+                      <div
+                        key={delivery.id}
+                        className="rounded-xl border border-white/8 bg-black/20 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {delivery.type}
+                            </p>
+                            <p className="mt-1 break-all font-mono text-xs text-slate-500">
+                              {delivery.id}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`shrink-0 rounded-md px-2 py-1 text-xs ${
+                              delivery.status === "delivered"
+                                ? "bg-emerald-400/10 text-emerald-300"
+                                : delivery.status === "failed"
+                                  ? "bg-rose-400/10 text-rose-300"
+                                  : "bg-amber-400/10 text-amber-300"
+                            }`}
+                          >
+                            {delivery.status}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 space-y-2">
+                          {delivery.attempts.map((attempt) => (
+                            <div
+                              key={attempt.number}
+                              className="flex items-start justify-between gap-3 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-slate-300">
+                                  Attempt {attempt.number}
+                                  {" · "}
+                                  {attempt.status === null
+                                    ? "In progress"
+                                    : `HTTP ${attempt.status}`}
+                                </p>
+                                <p className="mt-1 wrap-break-word text-slate-500">
+                                  {attempt.message}
+                                </p>
+                              </div>
+                              <span className="shrink-0 text-slate-600">
+                                {formatTime(attempt.attemptedAt)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {delivery.status === "failed" && (
+                          <button
+                            type="button"
+                            disabled={retryingId !== null}
+                            onClick={() => retryDelivery(delivery)}
+                            className="mt-4 w-full rounded-lg border border-indigo-400/30 bg-indigo-400/10 px-3 py-2 text-sm font-medium text-indigo-200 transition hover:bg-indigo-400/20 disabled:opacity-50"
+                          >
+                            {retryingId === delivery.id
+                              ? "Retrying..."
+                              : "Retry delivery"}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="mt-5 rounded-xl border border-white/[0.07] bg-black/20 p-4">
                 <p className="text-xs font-medium uppercase tracking-wider text-slate-500">

@@ -31,6 +31,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+
+  // Learning-only failure simulation.
+  if (request.headers.get("x-simulate-failure") === "true") {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Simulated temporary receiver failure",
+      },
+      { status: 500 },
+    );
+  }
+
   const event = {
     id: body.id,
     type: body.type,
