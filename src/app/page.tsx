@@ -174,7 +174,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-sm sm:self-auto">
+          <div className="flex items-center gap-2 self-start rounded-full border border-white/10 bg-white/3 px-3 py-2 text-sm sm:self-auto">
             <span
               className={`h-2.5 w-2.5 rounded-full ${
                 connection === "connected"
@@ -240,7 +240,7 @@ export default function Home() {
         </section>
 
         <section className="mt-7 grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/2.5">
             <div className="flex flex-col justify-between gap-4 border-b border-white/10 p-5 sm:flex-row sm:items-center">
               <div>
                 <h2 className="font-semibold">Event stream</h2>
@@ -265,7 +265,7 @@ export default function Home() {
               </select>
             </div>
 
-            <div className="max-h-[560px] overflow-y-auto">
+            <div className="max-h-140 overflow-y-auto">
               {filteredEvents.length === 0 ? (
                 <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 text-2xl text-slate-400">
@@ -282,9 +282,9 @@ export default function Home() {
                   <button
                     key={event.id}
                     onClick={() => setSelectedId(event.id)}
-                    className={`block w-full border-b border-white/[0.06] p-5 text-left transition hover:bg-white/[0.04] ${
+                    className={`block w-full border-b border-white/6 p-5 text-left transition hover:bg-white/4 ${
                       selectedEvent?.id === event.id
-                        ? "bg-indigo-500/[0.08] ring-1 ring-inset ring-indigo-400/30"
+                        ? "bg-indigo-500/8 ring-1 ring-inset ring-indigo-400/30"
                         : ""
                     }`}
                   >
@@ -313,7 +313,7 @@ export default function Home() {
           </div>
 
           <div className="space-y-5">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+            <div className="rounded-2xl border border-white/10 bg-white/2.5 p-5">
               <div>
                 <h2 className="font-semibold">Event simulator</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-400">
@@ -349,7 +349,7 @@ export default function Home() {
                     key={item.type}
                     disabled={sending}
                     onClick={() => simulateEvent(item.type)}
-                    className={`rounded-xl border bg-white/[0.02] px-3 py-3 text-sm font-medium transition disabled:cursor-wait disabled:opacity-50 ${item.color}`}
+                    className={`rounded-xl border bg-white/2 px-3 py-3 text-sm font-medium transition disabled:cursor-wait disabled:opacity-50 ${item.color}`}
                   >
                     {sending ? "Sending..." : item.label}
                   </button>
@@ -359,7 +359,7 @@ export default function Home() {
               {notice && (
                 <p
                   role="status"
-                  className="mt-4 break-words rounded-lg bg-white/[0.04] p-3 text-xs leading-5 text-slate-300"
+                  className="mt-4 wrap-break-word rounded-lg bg-white/4 p-3 text-xs leading-5 text-slate-300"
                 >
                   {notice}
                 </p>
@@ -379,7 +379,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+            <div className="rounded-2xl border border-white/10 bg-white/2.5 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold">Event details</h2>
                 {selectedEvent && (
