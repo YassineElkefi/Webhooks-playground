@@ -1,7 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addEvent } from "@/lib/events";
+import { verifySignature } from "@/lib/signature";
 
 export async function POST(request: NextRequest) {
+
+  // Read the original bytes as text before parsing JSON.
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-webhook-signature");
+
+  try {
+    if (!verifySignature(rawBody, signature)){
+      return NextResponse.json(
+        { success: false, message: "Invalid webhook signature"},
+        { status: 401 },
+      );
+    }
+  } catch {
+      return NextResponse.json(
+        { success: false, message: "Webhook signing is not configured" },
+        { status: 500 },
+      );
+  }
+
   let body: unknown;
 
   try {
@@ -54,8 +74,6 @@ export async function POST(request: NextRequest) {
     data: body.data,
   };
 
-  console.log("📩 Webhook received:", event.id, event.type);
-
   const isNewEvent = addEvent(event);
   if(!isNewEvent) {
     return NextResponse.json(
@@ -68,6 +86,9 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   }
+
+    console.log("📩 Verified Webhook", event.id, event.type);
+
 
   return NextResponse.json(
     {
