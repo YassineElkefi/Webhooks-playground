@@ -1,28 +1,58 @@
-
 import { NextRequest, NextResponse } from "next/server";
+import { addEvent } from "@/lib/events";
 
 export async function POST(request: NextRequest) {
+  let body: unknown;
+
   try {
-    const body: unknown = await request.json();
-
-    console.log("📩 Webhook received!");
-    console.log("Payload:", body);
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Webhook received successfully",
-        receivedAt: new Date().toISOString(),
-      },
-      { status: 200 },
-    );
+    body = await request.json();
   } catch {
+    return NextResponse.json(
+      { success: false, message: "Invalid JSON payload" },
+      { status: 400 },
+    );
+  }
+
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("id" in body) ||
+    typeof body.id !== "string" ||
+    !("type" in body) ||
+    typeof body.type !== "string" ||
+    !("data" in body)
+  ) {
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid JSON payload",
+        message: "Expected id, type, and data fields",
       },
       { status: 400 },
     );
   }
+
+  const event = {
+    id: body.id,
+    type: body.type,
+    createdAt:
+      "createdAt" in body && typeof body.createdAt === "string"
+        ? body.createdAt
+        : new Date().toISOString(),
+    receivedAt: new Date().toISOString(),
+    data: body.data,
+  };
+
+  console.log("📩 Webhook received:", event.id, event.type);
+
+  addEvent(event);
+
+  return NextResponse.json(
+    {
+      success: true,
+      message: "Webhook received successfully",
+      eventId: event.id,
+      receivedAt: event.receivedAt,
+    },
+    { status: 200 },
+  );
 }
